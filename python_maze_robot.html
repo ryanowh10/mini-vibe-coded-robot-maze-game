@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Python Maze Robot — Interactive Learning Environment</title>
+<!-- Tailwind CSS for UI styling -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Tone.js for music -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+<style>
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: #0f172a;
+    color: #f8fafc;
+  }
+  
+  .font-mono {
+    font-family: 'Fira Code', monospace;
+  }
+
+  /* Grid Cell Styling */
+  .maze-cell {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+    user-select: none;
+  }
+
+  /* Robot Rotation Classes */
+  .robot-icon {
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.2s, left 0.2s;
+  }
+  .dir-0 { transform: rotate(0deg); }   /* UP */
+  .dir-1 { transform: rotate(90deg); }  /* RIGHT */
+  .dir-2 { transform: rotate(180deg); } /* DOWN */
+  .dir-3 { transform: rotate(-90deg); } /* LEFT */
+
+  /* Path Trail Dot */
+  .trail-dot {
+    width: 8px;
+    height: 8px;
+    background-color: rgba(99, 102, 241, 0.4);
+    border-radius: 50%;
+    animation: popIn 0.3s ease-out;
+  }
+
+  @keyframes popIn {
+    0% { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  @keyframes pulseGoal {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+  }
+
+  .goal-emoji {
+    animation: pulseGoal 1.8s infinite ease-in-out;
+  }
+
+  /* Custom Scrollbars */
+  textarea::-webkit-scrollbar, div::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  textarea::-webkit-scrollbar-thumb, div::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-4 md:p-6">
+
+<div class="max-w-7xl w-full mx-auto space-y-6">
+  
+  <!-- Header Navbar -->
+  <header class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-800/80 border border-slate-700/60 p-4 sm:px-6 rounded-2xl backdrop-blur-md shadow-xl">
+    <div class="flex items-center gap-3">
+      <div class="p-2.5 bg-indigo-600/20 border border-indigo-500/30 rounded-xl text-2xl">
+        🤖
+      </div>
+      <div>
+        <h1 class="text-xl sm:text-2xl font-bold bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
+          Python Maze Robot
+        </h1>
+        <p class="text-xs sm:text-sm text-slate-400">Master Python fundamentals with interactive logic</p>
+      </div>
+    </div>
+
+    <!-- Controls Header -->
+    <div class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+      <button id="music-toggle" class="bg-slate-900/60 hover:bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 transition-colors flex items-center gap-2">
+        <span>🔇</span> Music
+      </button>
+
+      <div class="flex items-center gap-2 bg-slate-900/60 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300">
+        <span id="level-indicator" class="text-indigo-400 font-semibold">Level 1</span>
+      </div>
+
+      <div class="flex items-center gap-1 bg-slate-900/60 border border-slate-700 px-2 py-1.5 rounded-lg text-xs">
+        <span class="text-slate-400">Speed:</span>
+        <select id="speed-select" class="bg-transparent text-emerald-400 font-semibold outline-none cursor-pointer">
+          <option value="500">Slow</option>
+          <option value="300" selected>Normal</option>
+          <option value="120">Fast</option>
+          <option value="30">Turbo</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Grid Layout -->
+  <main class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+    <!-- Left Column: Maze Canvas & Legend -->
+    <section class="lg:col-span-6 xl:col-span-6 flex flex-col items-center gap-4">
+      
+      <!-- Maze Screen Container -->
+      <div class="w-full bg-slate-800/80 border border-slate-700/60 p-4 sm:p-6 rounded-2xl shadow-xl flex flex-col items-center justify-center min-h-[380px] sm:min-h-[480px]">
+        
+        <div id="maze-container" class="w-full flex items-center justify-center">
+          <div id="maze" class="grid gap-1 bg-slate-950 p-2 sm:p-3 rounded-xl border border-slate-800 shadow-2xl w-full max-w-[500px] aspect-square">
+            <!-- Dynamic Grid Cells generated in JS -->
+          </div>
+        </div>
+
+        <!-- Legend Bar -->
+        <div class="mt-5 flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs text-slate-400 bg-slate-900/70 border border-slate-800 px-4 py-2.5 rounded-xl w-full max-w-[500px]">
+          <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-blue-500/30 border border-blue-400 inline-block"></span> Start</div>
+          <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-400/30 border border-amber-300 inline-block"></span> ⭐ Goal</div>
+          <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-slate-700 inline-block"></span> Wall</div>
+          <div class="flex items-center gap-1.5">🤖 Robot</div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Right Column: Code Editor & Instructions -->
+    <section class="lg:col-span-6 xl:col-span-6 space-y-4">
+      
+      <div class="bg-slate-800/80 border border-slate-700/60 p-5 rounded-2xl shadow-xl flex flex-col gap-4">
+        
+        <!-- Editor Header -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-rose-500 inline-block"></span>
+            <span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span>
+            <span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+            <span class="text-xs font-mono text-slate-400 ml-2">main.py</span>
+          </div>
+
+          <button id="clear-code" class="text-xs text-slate-400 hover:text-slate-200 transition-colors">
+            Clear Editor
+          </button>
+        </div>
+
+        <!-- Textarea Python Editor -->
+        <div class="relative rounded-xl overflow-hidden border border-slate-700 bg-slate-950/90 shadow-inner">
+          <textarea id="code" spellcheck="false" class="w-full h-72 sm:h-80 p-4 font-mono text-sm sm:text-base text-emerald-400 bg-transparent outline-none leading-relaxed resize-y focus:ring-1 focus:ring-indigo-500/50 transition-all" placeholder="# Write Python commands here..."></textarea>
+        </div>
+
+        <!-- Action Control Buttons -->
+        <div class="flex flex-wrap items-center gap-2 pt-1">
+          <button id="run" class="flex-1 min-w-[120px] bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-900/30 active:scale-95 transition-all flex items-center justify-center gap-2">
+            <span>▶</span> Run Code
+          </button>
+          
+          <button id="stop" class="bg-rose-600/80 hover:bg-rose-500 text-white font-semibold py-2.5 px-4 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5 opacity-60 cursor-not-allowed" disabled>
+            <span>⏹</span> Stop
+          </button>
+
+          <button id="reset" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold py-2.5 px-4 rounded-xl active:scale-95 transition-all">
+            ↻ Reset
+          </button>
+
+          <button id="next" class="bg-indigo-600/80 hover:bg-indigo-500 text-white font-semibold py-2.5 px-4 rounded-xl active:scale-95 transition-all">
+            Next Level ➔
+          </button>
+        </div>
+
+        <!-- Execution Status Box -->
+        <div id="status" class="p-3.5 rounded-xl bg-slate-900/90 border border-slate-700/70 text-xs sm:text-sm font-mono flex items-center gap-2 text-slate-300 min-h-[48px]">
+          <span class="text-indigo-400">💡</span> <span id="status-text">Ready! Press "Run Code" to execute.</span>
+        </div>
+
+        <!-- Quick Code Chips & Cheat Sheet -->
+        <div class="space-y-3 pt-2 border-t border-slate-700/50">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Quick Code Snippets</h3>
+            <span class="text-[11px] text-slate-500">Click to insert</span>
+          </div>
+
+          <div class="flex flex-wrap gap-1.5" id="quick-chips">
+            <!-- Level 1: Basic Movement -->
+            <button class="chip-btn bg-slate-700/60 hover:bg-indigo-600/40 border border-slate-600/60 hover:border-indigo-400 text-indigo-300 font-mono text-xs px-2.5 py-1.5 rounded-lg transition-all" data-level="0" data-code="forward()">forward()</button>
+            <button class="chip-btn bg-slate-700/60 hover:bg-indigo-600/40 border border-slate-600/60 hover:border-indigo-400 text-indigo-300 font-mono text-xs px-2.5 py-1.5 rounded-lg transition-all" data-level="0" data-code="left()">left()</button>
+            <button class="chip-btn bg-slate-700/60 hover:bg-indigo-600/40 border border-slate-600/60 hover:border-indigo-400 text-indigo-300 font-mono text-xs px-2.5 py-1.5 rounded-lg transition-all" data-level="0" data-code="right()">right()</button>
+            
+            <!-- Level 2: For Loops -->
+            <button class="chip-btn bg-slate-700/60 hover:bg-purple-600/40 border border-slate-600/60 hover:border-purple-400 text-purple-300 font-mono text-xs px-2.5 py-1.5 rounded-lg transition-all hidden" data-level="1" data-code="for i in range(4):&#10;    forward()">for loop</button>
+            
+            <!-- Level 3: Conditionals -->
+            <button class="chip-btn bg-slate-700/60 hover:bg-emerald-600/40 border border-slate-600/60 hover:border-emerald-400 text-emerald-300 font-mono text-xs px-2.5 py-1.5 rounded-lg transition-all hidden" data-level="2" data-code="if not at_goal():&#10;    forward()">if not at_goal():</button>
+            
+            <!-- Level 4 (Implicit): While loops (showing on level 2 and up for now based on your prompt) -->
+            <button class="chip-btn bg-slate-700/60 hover:bg-amber-600/40 border border-slate-600/60 hover:border-amber-400 text-amber-300 font-mono text-xs px-2.5 py-1.5 rounded-lg transition-all hidden" data-level="3" data-code="while wall_ahead():&#10;    left()">while wall_ahead():</button>
+            
+            <!-- Keeping the existing chips but hiding them initially to follow the progression -->
+            <button class="chip-btn bg-slate-700/60 hover:bg-amber-600/40 border border-slate-600/60 hover:border-amber-400 text-amber-300 font-mono text-xs px-2.5 py-1.5 rounded-lg transition-all hidden" data-level="4" data-code="while not at_goal():&#10;    forward()">while not at_goal():</button>
+            <button class="chip-btn bg-slate-700/60 hover:bg-emerald-600/40 border border-slate-600/60 hover:border-emerald-400 text-emerald-300 font-mono text-xs px-2.5 py-1.5 rounded-lg transition-all hidden" data-level="4" data-code="if wall_ahead():&#10;    right()&#10;else:&#10;    forward()">if wall_ahead():</button>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <footer class="text-center text-xs text-slate-500 py-2">
+    Educational Python Logic Maze • Designed for interactive learning
+  </footer>
+</div>
+
+<!-- Congrats Overlay -->
+<div id="congrats-screen" class="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-50 hidden flex-col items-center justify-center p-6 text-center">
+  <div class="text-7xl sm:text-9xl mb-6 animate-bounce">🏆</div>
+  <h2 class="text-4xl sm:text-6xl font-bold bg-gradient-to-r from-emerald-400 via-cyan-400 to-indigo-400 bg-clip-text text-transparent mb-4">
+    Congratulations!
+  </h2>
+  <p class="text-slate-300 text-lg sm:text-xl max-w-lg mb-8 leading-relaxed">
+    You have successfully completed all the maze levels and mastered the basics of Python logic!
+  </p>
+  <button id="restart-all" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3.5 px-8 rounded-xl shadow-lg shadow-indigo-900/30 active:scale-95 transition-all text-lg flex items-center gap-2">
+    <span>↻</span> Play Again
+  </button>
+</div>
+
+<script>
+/**
+ * Python Subset Interpreter & Maze Controller Engine
+ */
+
+// Maze Level Layout Maps (10x10 grids)
+const mazes = [
+  [
+    "##########",
+    "#S.......#",
+    "#.######.#",
+    "#........#",
+    "#.######.#",
+    "#........#",
+    "#.######.#",
+    "#........#",
+    "#.######G#",
+    "##########"
+  ],
+  [
+    "##########",
+    "#S.......#",
+    "#####.####",
+    "#.....#..#",
+    "#.###.#..#",
+    "#...#....#",
+    "###.######",
+    "#........#",
+    "#........G",
+    "##########"
+  ],
+  [
+    "##########",
+    "#S#......#",
+    "#.#.####.#",
+    "#.#......#",
+    "#.######.#",
+    "#........#",
+    "#.######.#",
+    "#........#",
+    "#........G",
+    "##########"
+  ]
+];
+
+// Direction Vectors: 0=UP (-1,0), 1=RIGHT (0,1), 2=DOWN (1,0), 3=LEFT (0,-1)
+const dirs = [
+  [-1, 0],
+  [0, 1],
+  [1, 0],
+  [0, -1]
+];
+
+// App State
+let mazeIndex = 0;
+let grid = [];
+let robot = { r: 0, c: 0, dir: 0 }; 
+let visitedCells = new Set();
+let running = false;
+let stopRequested = false;
+let stepDelay = 300;
+
+// Default Starter Python Code
+const defaultCode = `# Use Python to guide the robot to ⭐!
+while not at_goal():
+    if wall_ahead():
+        right()
+    else:
+        forward()`;
+
+// DOM Element References
+const mazeContainer = document.getElementById("maze");
+const levelIndicator = document.getElementById("level-indicator");
+const speedSelect = document.getElementById("speed-select");
+const codeArea = document.getElementById("code");
+const statusText = document.getElementById("status-text");
+const runBtn = document.getElementById("run");
+const stopBtn = document.getElementById("stop");
+const resetBtn = document.getElementById("reset");
+const nextBtn = document.getElementById("next");
+const clearCodeBtn = document.getElementById("clear-code");
+const musicToggleBtn = document.getElementById("music-toggle");
+const congratsScreen = document.getElementById("congrats-screen");
+const restartAllBtn = document.getElementById("restart-all");
+
+// Load initial starter code
+codeArea.value = defaultCode;
+
+let musicPlaying = false;
+let synth;
+let part;
+let toneInitialized = false;
+
+async function initTone() {
+  if (toneInitialized) return;
+  await Tone.start();
+  
+  synth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "square" },
+    envelope: { attack: 0.1, decay: 0.2, sustain: 0.2, release: 1 }
+  }).toDestination();
+  
+  synth.volume.value = -15; // Set a reasonable background volume
+
+  // Simple, somewhat retro-sounding melody
+  const melody = [
+    { time: "0:0:0", note: "C4", duration: "8n" },
+    { time: "0:0:2", note: "E4", duration: "8n" },
+    { time: "0:1:0", note: "G4", duration: "8n" },
+    { time: "0:1:2", note: "B4", duration: "8n" },
+    { time: "0:2:0", note: "C5", duration: "4n" },
+    { time: "0:3:0", note: "G4", duration: "4n" },
+    
+    { time: "1:0:0", note: "A3", duration: "8n" },
+    { time: "1:0:2", note: "C4", duration: "8n" },
+    { time: "1:1:0", note: "E4", duration: "8n" },
+    { time: "1:1:2", note: "G4", duration: "8n" },
+    { time: "1:2:0", note: "A4", duration: "4n" },
+    { time: "1:3:0", note: "E4", duration: "4n" }
+  ];
+
+  part = new Tone.Part((time, value) => {
+    synth.triggerAttackRelease(value.note, value.duration, time);
+  }, melody).start(0);
+
+  part.loop = true;
+  part.loopEnd = "2m"; // Loop every 2 measures
+  Tone.Transport.bpm.value = 120;
+  
+  toneInitialized = true;
+}
+
+musicToggleBtn.addEventListener("click", async () => {
+  if (!toneInitialized) {
+    await initTone();
+  }
+  
+  if (musicPlaying) {
+    Tone.Transport.pause();
+    musicToggleBtn.innerHTML = "<span>🔇</span> Music";
+    musicPlaying = false;
+  } else {
+    Tone.Transport.start();
+    musicToggleBtn.innerHTML = "<span>🔊</span> Music";
+    musicPlaying = true;
+  }
+});
+
+
+/**
+ * Initialize and render the selected maze map
+ */
+function loadMaze() {
+  grid = mazes[mazeIndex].map(row => row.padEnd(10, "#").slice(0, 10).split(""));
+  visitedCells.clear();
+  levelIndicator.textContent = `Level ${mazeIndex + 1} / ${mazes.length}`;
+
+  // Find start coordinate 'S'
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < grid[r].length; c++) {
+      if (grid[r][c] === "S") {
+        robot = { r, c, dir: 0 };
+        visitedCells.add(`${r},${c}`);
+      }
+    }
+  }
+
+  drawMaze();
+  updateAvailableCommands();
+  setStatus("Ready! Press 'Run Code' to execute your program.");
+}
+
+/**
+ * Show/Hide command chips based on the current maze level
+ */
+function updateAvailableCommands() {
+  const chips = document.querySelectorAll('.chip-btn');
+  chips.forEach(chip => {
+    // For this example, let's say:
+    // Level 0 shows data-level 0
+    // Level 1 shows data-level 0, 1
+    // Level 2 shows data-level 0, 1, 2, 3
+    // Level 3 shows all (0, 1, 2, 3, 4)
+    const chipLevel = parseInt(chip.getAttribute('data-level'), 10);
+    
+    let shouldShow = false;
+    if (mazeIndex === 0 && chipLevel === 0) shouldShow = true;
+    else if (mazeIndex === 1 && chipLevel <= 1) shouldShow = true;
+    else if (mazeIndex >= 2 && chipLevel <= 4) shouldShow = true; // Show all eventually
+
+    if (shouldShow) {
+      chip.classList.remove('hidden');
+    } else {
+      chip.classList.add('hidden');
+    }
+  });
+}
+
+/**
+ * Render the HTML grid based on internal state
+ */
+function drawMaze() {
+  mazeContainer.innerHTML = "";
+  mazeContainer.style.gridTemplateColumns = `repeat(${grid[0].length}, 1fr)`;
+
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < grid[r].length; c++) {
+      const cell = document.createElement("div");
+      cell.className = "maze-cell";
+
+      const tileType = grid[r][c];
+
+      if (tileType === "#") {
+        cell.classList.add("bg-slate-800", "border", "border-slate-700/50");
+      } else if (tileType === "S") {
+        cell.classList.add("bg-blue-900/30", "border", "border-blue-500/40", "text-blue-300", "font-bold", "text-xs");
+        if (r !== robot.r || c !== robot.c) cell.textContent = "START";
+      } else if (tileType === "G") {
+        cell.classList.add("bg-amber-900/30", "border", "border-amber-400/50");
+        if (r !== robot.r || c !== robot.c) {
+          const star = document.createElement("span");
+          star.className = "goal-emoji text-lg sm:text-2xl";
+          star.textContent = "⭐";
+          cell.appendChild(star);
+        }
+      } else {
+        cell.classList.add("bg-slate-900/40", "border", "border-slate-800/40");
+      }
+
+      // Render Trail Footprints
+      if (tileType !== "#" && visitedCells.has(`${r},${c}`) && (r !== robot.r || c !== robot.c)) {
+        const dot = document.createElement("div");
+        dot.className = "trail-dot";
+        cell.appendChild(dot);
+      }
+
+      // Render Robot Element
+      if (r === robot.r && c === robot.c) {
+        const robotElem = document.createElement("div");
+        robotElem.className = `robot-icon text-xl sm:text-3xl z-10 dir-${robot.dir}`;
+        robotElem.textContent = "🤖";
+        cell.appendChild(robotElem);
+      }
+
+      mazeContainer.appendChild(cell);
+    }
+  }
+}
+
+/**
+ * Set status text with styled feedback
+ */
+function setStatus(msg, isError = false) {
+  statusText.textContent = msg;
+  if (isError) {
+    statusText.className = "text-rose-400 font-medium";
+  } else {
+    statusText.className = "text-slate-300 font-medium";
+  }
+}
+
+/**
+ * Reset robot back to starting square
+ */
+function resetRobot() {
+  visitedCells.clear();
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < grid[r].length; c++) {
+      if (grid[r][c] === "S") {
+        robot = { r, c, dir: 0 };
+        visitedCells.add(`${r},${c}`);
+      }
+    }
+  }
+  drawMaze();
+  setStatus("Robot reset to start position.");
+}
+
+/**
+ * Collision & Condition Checks
+ */
+function wallAhead() {
+  const [dr, dc] = dirs[robot.dir];
+  const nr = robot.r + dr;
+  const nc = robot.c + dc;
+  return !grid[nr] || grid[nr][nc] === undefined || grid[nr][nc] === "#";
+}
+
+function atGoal() {
+  return grid[robot.r][robot.c] === "G";
+}
+
+/**
+ * Primitive Actions
+ */
+function moveForward() {
+  if (wallAhead()) {
+    throw new Error("Ouch! The robot hit a wall!");
+  }
+  robot.r += dirs[robot.dir][0];
+  robot.c += dirs[robot.dir][1];
+  visitedCells.add(`${robot.r},${robot.c}`);
+  drawMaze();
+}
+
+function turnLeft() {
+  robot.dir = (robot.dir + 3) % 4;
+  drawMaze();
+}
+
+function turnRight() {
+  robot.dir = (robot.dir + 1) % 4;
+  drawMaze();
+}
+
+/**
+ * Helper to count leading spaces for indentation checks
+ */
+function indentOf(str) {
+  const match = str.match(/^ */);
+  return match ? match[0].length : 0;
+}
+
+/**
+ * Parse Python subset source string into AST nodes
+ */
+function parseProgram(source) {
+  const raw = source.replace(/\t/g, "    ").split("\n");
+  const lines = [];
+
+  raw.forEach((original, n) => {
+    const trimmed = original.trim();
+    if (!trimmed || trimmed.startsWith("#")) return;
+    const ind = indentOf(original);
+    if (ind % 4 !== 0) {
+      throw new Error(`Line ${n + 1}: Indentation must use 4 spaces per block level.`);
+    }
+    lines.push({ text: trimmed, indent: ind, line: n + 1 });
+  });
+
+  if (!lines.length) throw new Error("Your program code is empty.");
+
+  function parseBlock(pos, indent) {
+    const nodes = [];
+
+    while (pos.i < lines.length) {
+      const x = lines[pos.i];
+
+      if (x.indent < indent) break;
+      if (x.indent > indent) {
+        throw new Error(`Line ${x.line}: Unexpected indentation level.`);
+      }
+
+      if (x.text === "else:") break;
+
+      // Handle IF Conditionals
+      if (x.text === "if wall_ahead():" || x.text === "if not wall_ahead():" || x.text === "if at_goal():" || x.text === "if not at_goal():") {
+        const test = x.text.includes("wall_ahead") ? "wall_ahead()" : "at_goal()";
+        const cond = !x.text.includes("not");
+        pos.i++;
+
+        if (pos.i >= lines.length || lines[pos.i].indent <= indent) {
+          throw new Error(`Line ${x.line}: The 'if' block requires indented code inside.`);
+        }
+
+        const childIndent = lines[pos.i].indent;
+        const body = parseBlock(pos, childIndent);
+        let elseBody = [];
+
+        if (pos.i < lines.length && lines[pos.i].indent === indent && lines[pos.i].text === "else:") {
+          pos.i++;
+          if (pos.i >= lines.length || lines[pos.i].indent <= indent) {
+            throw new Error(`Line ${x.line}: The 'else' block requires indented code inside.`);
+          }
+          const ei = lines[pos.i].indent;
+          elseBody = parseBlock(pos, ei);
+        }
+
+        nodes.push({ type: "if", test, cond, body, elseBody, line: x.line });
+        continue;
+      }
+
+      // Handle FOR Loops
+      const fm = x.text.match(/^for\s+([A-Za-z_]\w*)\s+in\s+range\((\d+)\):$/);
+      if (fm) {
+        const count = Number(fm[2]);
+        pos.i++;
+        if (pos.i >= lines.length || lines[pos.i].indent <= indent) {
+          throw new Error(`Line ${x.line}: The 'for' loop requires indented code inside.`);
+        }
+        const childIndent = lines[pos.i].indent;
+        const body = parseBlock(pos, childIndent);
+        nodes.push({ type: "for", count, body, line: x.line });
+        continue;
+      }
+
+      // Handle WHILE Loops
+      const wm = x.text.match(/^while\s+(not\s+)?(at_goal\(\)|wall_ahead\(\))\s*:\s*$/);
+      if (wm) {
+        const neg = !!wm[1];
+        const test = wm[2];
+        pos.i++;
+        if (pos.i >= lines.length || lines[pos.i].indent <= indent) {
+          throw new Error(`Line ${x.line}: The 'while' loop requires indented code inside.`);
+        }
+        const childIndent = lines[pos.i].indent;
+        const body = parseBlock(pos, childIndent);
+        nodes.push({ type: "while", neg, test, body, line: x.line });
+        continue;
+      }
+
+      // Handle Commands
+      if (x.text === "forward()" || x.text === "left()" || x.text === "right()") {
+        nodes.push({ type: "cmd", cmd: x.text.slice(0, -2), line: x.line });
+        pos.i++;
+        continue;
+      }
+
+      throw new Error(`Line ${x.line}: Syntax error. Unrecognized command '${x.text}'.`);
+    }
+
+    return nodes;
+  }
+
+  const pos = { i: 0 };
+  const tree = parseBlock(pos, 0);
+  if (pos.i < lines.length) throw new Error(`Line ${lines[pos.i].line}: Unexpected syntax or misplaced block.`);
+  return tree;
+}
+
+/**
+ * Evaluate boolean expression
+ */
+function evaluate(test, neg) {
+  let val = false;
+  if (test === "at_goal()") val = atGoal();
+  else if (test === "wall_ahead()") val = wallAhead();
+  return neg ? !val : val;
+}
+
+/**
+ * Execute AST with async delay steps
+ */
+async function execute(nodes, depth = 0) {
+  if (depth > 30) throw new Error("Program call stack limit reached.");
+
+  for (const node of nodes) {
+    if (stopRequested) return false;
+    if (atGoal()) return true;
+
+    if (node.type === "cmd") {
+      setStatus(`Executing line ${node.line}: ${node.cmd}()`);
+      await sleep(stepDelay);
+      if (stopRequested) return false;
+
+      if (node.cmd === "forward") moveForward();
+      if (node.cmd === "left") turnLeft();
+      if (node.cmd === "right") turnRight();
+    }
+
+    if (node.type === "if") {
+      setStatus(`Line ${node.line}: Checking if condition...`);
+      await sleep(stepDelay * 0.6);
+      if (stopRequested) return false;
+
+      const result = evaluate(node.test, false);
+      const isTrue = node.cond ? result : !result;
+
+      if (isTrue) {
+        await execute(node.body, depth + 1);
+      } else if (node.elseBody.length) {
+        await execute(node.elseBody, depth + 1);
+      }
+    }
+
+    if (node.type === "for") {
+      if (node.count > 100) throw new Error("For loop step limit safety cap (100) reached.");
+      for (let i = 0; i < node.count; i++) {
+        if (stopRequested || atGoal()) break;
+        setStatus(`Line ${node.line}: loop iteration ${i + 1} of ${node.count}`);
+        await execute(node.body, depth + 1);
+      }
+    }
+
+    if (node.type === "while") {
+      let guard = 0;
+      while (evaluate(node.test, node.neg)) {
+        if (stopRequested || atGoal()) break;
+        guard++;
+        if (guard > 200) {
+          throw new Error(`Infinite loop detected! 'while' loop ran over 200 times.`);
+        }
+        setStatus(`Line ${node.line}: while loop step #${guard}`);
+        await execute(node.body, depth + 1);
+      }
+    }
+  }
+
+  return atGoal();
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Run Program Handler
+ */
+async function runProgram() {
+  if (running) return;
+
+  running = true;
+  stopRequested = false;
+
+  // Toggle UI state buttons
+  runBtn.disabled = true;
+  runBtn.classList.add("opacity-50", "cursor-not-allowed");
+  stopBtn.disabled = false;
+  stopBtn.classList.remove("opacity-60", "cursor-not-allowed");
+
+  resetRobot();
+
+  try {
+    const ast = parseProgram(codeArea.value);
+    const success = await execute(ast);
+
+    if (stopRequested) {
+      setStatus("Execution stopped by user.");
+    } else if (success) {
+      setStatus("🎉 SUCCESS! The robot reached the goal!", false);
+      statusText.className = "text-emerald-400 font-bold text-sm sm:text-base animate-bounce";
+    } else {
+      setStatus("Program completed, but the robot did not reach the goal.", true);
+    }
+  } catch (err) {
+    setStatus(`❌ ${err.message}`, true);
+  } finally {
+    running = false;
+    runBtn.disabled = false;
+    runBtn.classList.remove("opacity-50", "cursor-not-allowed");
+    stopBtn.disabled = true;
+    stopBtn.classList.add("opacity-60", "cursor-not-allowed");
+  }
+}
+
+// Event Listeners
+runBtn.addEventListener("click", runProgram);
+
+stopBtn.addEventListener("click", () => {
+  if (running) {
+    stopRequested = true;
+    setStatus("Stopping program execution...");
+  }
+});
+
+resetBtn.addEventListener("click", () => {
+  stopRequested = true;
+  resetRobot();
+});
+
+nextBtn.addEventListener("click", () => {
+  stopRequested = true;
+  if (mazeIndex < mazes.length - 1) {
+    mazeIndex++;
+    loadMaze();
+  } else {
+    congratsScreen.classList.remove("hidden");
+    congratsScreen.classList.add("flex");
+  }
+});
+
+restartAllBtn.addEventListener("click", () => {
+  congratsScreen.classList.add("hidden");
+  congratsScreen.classList.remove("flex");
+  mazeIndex = 0;
+  codeArea.value = defaultCode;
+  loadMaze();
+});
+
+speedSelect.addEventListener("change", (e) => {
+  stepDelay = parseInt(e.target.value, 10);
+});
+
+clearCodeBtn.addEventListener("click", () => {
+  codeArea.value = "";
+  codeArea.focus();
+});
+
+codeArea.addEventListener('keydown', function(e) {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const start = this.selectionStart;
+    const end = this.selectionEnd;
+
+    // Set textarea value to: text before caret + 4 spaces + text after caret
+    this.value = this.value.substring(0, start) +
+      "    " + this.value.substring(end);
+
+    // Put caret at right position again
+    this.selectionStart =
+      this.selectionEnd = start + 4;
+  }
+});
+
+// Quick insert chip buttons
+document.querySelectorAll(".chip-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const snippet = btn.getAttribute("data-code");
+    const startPos = codeArea.selectionStart;
+    const endPos = codeArea.selectionEnd;
+
+    const currentVal = codeArea.value;
+    codeArea.value = currentVal.substring(0, startPos) + snippet + currentVal.substring(endPos);
+    codeArea.focus();
+    codeArea.selectionStart = codeArea.selectionEnd = startPos + snippet.length;
+  });
+});
+
+// Boot Maze Application
+loadMaze();
+</script>
+</body>
+</html>
